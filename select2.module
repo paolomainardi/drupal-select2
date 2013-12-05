@@ -1,0 +1,145 @@
+<?php
+
+/**
+ * Implements hook_variable_info().
+ */
+function select2_variable_info($options) {
+  $variable['select2_override_select'] = array(
+    'title' => t('Use select2 as deafult widget for select fields', array(), $options),
+    'description' => t('Activating this option will override all select fields.', array(), $options),
+    'type' => 'boolean',
+    'default' => false,
+  );
+  return $variable;
+}
+
+/**
+ * Implements hook_libraries_info().
+ */
+function select2_libraries_info() {
+  global $language;
+  $libraries['select2'] = array(
+    'name' => 'Jquery Select2 library',
+    'vendor url' => 'https://github.com/ivaynberg/select2',
+    'download url' => 'https://github.com/ivaynberg/select2/tags',
+    'version callback' => 'select2_select2_get_version',
+    'version arguments' => array(
+      'file' => 'component.json',
+    ),
+    'files' => array(
+      'js' => array('select2.js'),
+      'css' => array('select2.css'),
+    ),
+  );
+  if (file_exists('sites/all/libraries/select2/select2_locale_' . $language->language . '.js')) {
+    $libraries['select2']['js'][] = 'select2_locale_' . $language->language . '.js';
+  }
+  return $libraries;
+}
+
+function select2_select2_get_version($info, $file) {
+  $select2_path = libraries_get_path('select2');
+  $composer = file_get_contents($select2_path . DIRECTORY_SEPARATOR . 'component.json');
+  if ($composer) {
+    $composer_decoded = drupal_json_decode($composer);
+    return $composer_decoded['version'];
+  }
+}
+
+/**
+ * Implements hook_field_widget_info()
+ */
+function select2_field_widget_info() {
+  return array(
+   'options_select2' => array(
+      'label' => 'Select2',
+      'field types' => array('list_integer', 'list_float', 'list_text', 'taxonomy_term_reference', 'entity_reference', 'language_field'),
+      'behaviors' => array(
+        'multiple values' => FIELD_BEHAVIOR_CUSTOM,
+      ),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_widget_form().
+ */
+function select2_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+ // Abstract over the actual field columns, to allow different field types to
+  // reuse those widgets.
+  $value_key = key($field['columns']);
+
+  $type = str_replace('options_', '', $instance['widget']['type']);
+  $multiple = $field['cardinality'] > 1 || $field['cardinality'] == FIELD_CARDINALITY_UNLIMITED;
+  $required = $element['#required'];
+  $has_value = isset($items[0][$value_key]);
+  $properties = _options_properties($type, $multiple, $required, $has_value);
+
+  $entity_type = $element['#entity_type'];
+  $entity = $element['#entity'];
+
+  // Prepare the list of options.
+  $options = _options_get_options($field, $instance, $properties, $entity_type, $entity);
+
+  // Put current field values in shape.
+  $default_value = _options_storage_to_form($items, $options, $value_key, $properties);
+
+  switch ($type) {
+    case 'select2':
+      $element += array(
+        '#type' => 'select',
+        '#use_select2' => true,
+        '#default_value' => $default_value,
+        // Do not display a 'multiple' select box if there is only one option.
+        '#multiple' => $multiple && count($options) > 1,
+        '#options' => $options,
+      );
+      break;
+  }
+  $element += array(
+    '#value_key' => $value_key,
+    '#element_validate' => array('options_field_widget_validate'),
+    '#properties' => $properties,
+  );
+  return $element;
+}
+
+/**
+ * Implements hook_element_info_alter().
+ */
+function select2_element_info_alter(&$type) {
+  if (isset($type['select'])) {
+    $type['select']['#process'][] = 'select2_select2_element_process';
+  }
+}
+
+function select2_select2_element_process($element) {
+  if (isset($element['#use_select2']) || variable_get_value('select2_override_select')) {
+    $options = array();
+    if (isset($element['#select2_options']) && is_array($element['#select2_options'])) {
+      $options['readonly'] = (isset($element['#disabled']) ? true : false);
+      $options = array_merge($options, $element['#select2_options']);
+    }
+    // load select2 library using libraries api
+    $library = libraries_load('select2');
+    $element['#attached']['libraries_load'][] = array('select2');
+
+    // attach select2 init handler
+    $element['#attached']['js'][] =  drupal_get_path('module', 'select2') . '/js/select2.js';
+    $id = $element['#id'];
+
+    // add select2 settings
+    $js_settings['select2'][$id] = array(
+      'input_id' => $id,
+      'multiple' => $element['#multiple'],
+      'required' => $element['#required'],
+      'options' => $options,
+    );
+
+    // attach settings
+    $element['#attached']['js'][] = array('data' => $js_settings, 'type' => 'setting');
+  }
+  return $element;
+}
+
+
