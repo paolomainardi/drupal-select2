@@ -115,6 +115,12 @@ function select2_element_info_alter(&$type) {
 
 function select2_select2_element_process($element) {
   if (isset($element['#use_select2']) || variable_get_value('select2_override_select')) {
+
+    // check if the library is present
+    if ((!$library = libraries_detect($name)) && empty($library['installed'])) {
+      drupal_set_message(t('Select2 library is not installed, please download it from https://github.com/ivaynberg/select2'), 'error');
+    }
+
     $options = array();
     if (isset($element['#select2_options']) && is_array($element['#select2_options'])) {
       $options['readonly'] = (isset($element['#disabled']) ? true : false);
