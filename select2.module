@@ -39,7 +39,8 @@ function select2_libraries_info() {
 
 function select2_select2_get_version($info, $file) {
   $select2_path = libraries_get_path('select2');
-  $composer = file_get_contents($select2_path . DIRECTORY_SEPARATOR . 'component.json');
+  $module_path = drupal_get_path('module', 'select2');
+  $composer = file_get_contents($module_path . DIRECTORY_SEPARATOR . 'component.json');
   if ($composer) {
     $composer_decoded = drupal_json_decode($composer);
     return $composer_decoded['version'];
@@ -117,8 +118,9 @@ function select2_select2_element_process($element) {
   if (isset($element['#use_select2']) || variable_get_value('select2_override_select')) {
 
     // check if the library is present
-    if ((!$library = libraries_detect($name)) && empty($library['installed'])) {
+    if (($library = libraries_detect('select2')) && empty($library['installed'])) {
       drupal_set_message(t('Select2 library is not installed, please download it from https://github.com/ivaynberg/select2'), 'error');
+      return;
     }
 
     $options = array();
